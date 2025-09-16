@@ -2630,33 +2630,37 @@ def generate_file_response(file_object: FileUpload) -> FileResponse:
     cleaned_file_name = re.sub(r'[<>:"/\\|?*`=\'&%#;]', "-", file_object.title)
 
     return generate_file_response_from_file_path(
-        file_path, file_name=cleaned_file_name, file_size=file_object.file.size,
+        file_path, file_name=cleaned_file_name, file_size=file_object.file.size, is_svg=file_object.file.name.lower().endswith('.svg')
     )
 
 
 def generate_file_response_from_file_path(
-    file_path: str, file_name: str | None = None, file_size: int | None = None,
+    file_path: str, file_name: str | None = None, file_size: int | None = None, is_svg: bool = False
 ) -> FileResponse:
-    """Serve an local file in a uniformed way."""
-    # Determine the file path
+    """Serve a local file in a uniformed way, with SVG support for browser embedding."""
+    import mimetypes
     path = Path(file_path)
     file_path_without_extension = path.parent / path.stem
     file_extension = path.suffix
-    # Determine the file name if not supplied
     if file_name is None:
         file_name = file_path_without_extension.rsplit("/")[-1]
-    # Determine the file size if not supplied
     if file_size is None:
-        file_size = pathlib.Path(file_path).stat().st_size
-    # Generate the FileResponse
+        file_size = path.stat().st_size
     full_file_name = f"{file_name}{file_extension}"
+    # Guess content type
+    guessed_type, _ = mimetypes.guess_type(str(file_path))
+    if is_svg or (guessed_type == "image/svg+xml"):
+        content_type = "image/svg+xml"
+        disposition = f'inline; filename="{full_file_name}"'
+    else:
+        content_type = guessed_type or "application/octet-stream"
+        disposition = f'attachment; filename="{full_file_name}"'
     response = FileResponse(
         path.open("rb"),
         filename=full_file_name,
-        content_type=f"{mimetypes.guess_type(file_path)}",
+        content_type=content_type,
     )
-    # Add some important headers
-    response["Content-Disposition"] = f'attachment; filename="{full_file_name}"'
+    response["Content-Disposition"] = disposition
     response["Content-Length"] = file_size
     return response
 
